@@ -10,7 +10,7 @@ import Combine
 import MediaPlayer
 import SwiftUI
 
-// MARK: - AudioProcessor (improved)
+// MARK: - AudioProcessor (improved with volume and test gain)
 class AudioProcessor: ObservableObject {
     static let shared = AudioProcessor()
     
@@ -59,6 +59,9 @@ class AudioProcessor: ObservableObject {
         engine.connect(playerNode, to: eq, format: nil)
         engine.connect(eq, to: engine.mainMixerNode, format: nil)
         
+        // Ensure mixer output is audible
+        engine.mainMixerNode.outputVolume = 1.0
+        
         do {
             try engine.start()
             isEngineRunning = true
@@ -70,7 +73,7 @@ class AudioProcessor: ObservableObject {
         }
     }
     
-    func play(url: URL) -> Bool {  // Returns success
+    func play(url: URL) -> Bool {
         guard isEngineRunning else {
             didFail = true
             return false
@@ -85,6 +88,15 @@ class AudioProcessor: ObservableObject {
         }
         
         playerNode.scheduleFile(file, at: nil)
+        
+        // Ensure volume is up
+        playerNode.volume = 1.0
+        
+        // Test: apply a small EQ boost to all bands to verify effect
+        for i in 0..<eq.bands.count {
+            eq.bands[i].gain = 3.0
+        }
+        
         playerNode.play()
         didFail = false
         return true
@@ -266,11 +278,20 @@ class PlayerViewModel: ObservableObject {
     self._playFromLocal = audioURL?.isFileURL == true
     self.usingLocalProcessor = self._playFromLocal
 
-    // 🔧 TEMPORARY: Force AVPlayer for local files to test playback
     if usingLocalProcessor, let localURL = audioURL {
-        self.usingLocalProcessor = false
-        self.playerItem = AVPlayerItem(url: localURL)
-        self.player?.replaceCurrentItem(with: self.playerItem)
+        // Use AudioProcessor for local files (no longer bypassing)
+        let success = AudioProcessor.shared.play(url: localURL)
+        if success {
+            self.player = nil
+            self.playerItem = nil
+            self.isMediaLoading = false
+            self.isMediaFailed = false
+        } else {
+            // Fallback to AVPlayer if AudioProcessor fails
+            self.usingLocalProcessor = false
+            self.playerItem = AVPlayerItem(url: localURL)
+            self.player?.replaceCurrentItem(with: self.playerItem)
+        }
     } else {
         self.playerItem = AVPlayerItem(url: audioURL!)
         self.player?.replaceCurrentItem(with: self.playerItem)
@@ -331,7 +352,7 @@ class PlayerViewModel: ObservableObject {
       // Start timer fallback as well (safe to run alongside the observer)
       startProgressTimer()
     } else {
-      // Progress won't update yet – we'll add later
+      // For now, AudioProcessor has no progress updates – we'll add later
     }
 
     self.initNowPlayingInfo(
@@ -373,7 +394,7 @@ class PlayerViewModel: ObservableObject {
     }
   }
 
-  // MARK: - Timer fallback for progress updates
+  // MARK: - Timer fallback for progress updates (AVPlayer only)
   private func startProgressTimer() {
     progressTimer?.invalidate()
     progressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
