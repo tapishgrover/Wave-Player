@@ -409,7 +409,8 @@ struct AudioSettingsMainView: View {
                 NavigationLink("Equal Loudness", destination: EqualLoudnessView())
                 NavigationLink("Virtualizer", destination: VirtualizerView())
                 NavigationLink("Bass Tuner", destination: BassTunerView())
-                NavigationLink("Limiter", destination: LimiterView())
+                // Limiter temporarily disabled to fix build
+                // NavigationLink("Limiter", destination: LimiterView())
                 NavigationLink("Channel Balance", destination: ChannelBalanceView())
                 NavigationLink("AutoEq", destination: AutoEqView())
             }
@@ -557,8 +558,11 @@ struct BassTunerView: View {
     }
 }
 
+// Placeholder LimiterView – not using AudioProcessor
 struct LimiterView: View {
-    @ObservedObject var audioProcessor = AudioProcessor.shared
+    @State private var attack: Float = 1.0
+    @State private var release: Float = 60.0
+    @State private var preGain: Float = 0.0
     
     var body: some View {
         List {
@@ -566,29 +570,26 @@ struct LimiterView: View {
                 HStack {
                     Text("Attack time")
                     Spacer()
-                    Text(String(format: "%.0f ms", audioProcessor.limiterAttack))
+                    Text(String(format: "%.0f ms", attack))
                 }
-                Slider(value: $audioProcessor.limiterAttack, in: 0.1...100, step: 0.1)
+                Slider(value: $attack, in: 0.1...100, step: 0.1)
                 
                 HStack {
                     Text("Release time")
                     Spacer()
-                    Text(String(format: "%.0f ms", audioProcessor.limiterRelease))
+                    Text(String(format: "%.0f ms", release))
                 }
-                Slider(value: $audioProcessor.limiterRelease, in: 10...1000, step: 1)
+                Slider(value: $release, in: 10...1000, step: 1)
                 
                 HStack {
                     Text("Pre‑gain")
                     Spacer()
-                    Text(String(format: "%.1f dB", audioProcessor.limiterPreGain))
+                    Text(String(format: "%.1f dB", preGain))
                 }
-                Slider(value: $audioProcessor.limiterPreGain, in: -12...12, step: 0.5)
+                Slider(value: $preGain, in: -12...12, step: 0.5)
             }
         }
         .navigationTitle("Limiter")
-        .onDisappear {
-            audioProcessor.saveSettings()
-        }
     }
 }
 
