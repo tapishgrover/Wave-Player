@@ -44,6 +44,9 @@ class PlayerViewModel: ObservableObject {
 
   private var scrobbleThreshold = 0.5
 
+  // MARK: - New property for local audio processing
+  private var usingLocalProcessor: Bool = false
+
   var nowPlaying: QueueEntity {
     return self.queue[self.activeQueueIdx]
   }
@@ -132,6 +135,7 @@ class PlayerViewModel: ObservableObject {
     return !self.queue.isEmpty
   }
 
+  // MARK: - Updated setNowPlaying with AudioProcessor support
   func setNowPlaying(playAudio: Bool = true) {
     self.shouldHidePlayer = false
     self.isLocallySaved = false
@@ -140,13 +144,21 @@ class PlayerViewModel: ObservableObject {
       player?.removeTimeObserver(timeObserverToken)
     }
 
-    let audioURL = URL(
-      string: AlbumService.shared.getStreamUrl(id: self.nowPlaying.id ?? ""))
-
+    let audioURL = URL(string: AlbumService.shared.getStreamUrl(id: self.nowPlaying.id ?? ""))
     self._playFromLocal = audioURL?.isFileURL == true
+    self.usingLocalProcessor = self._playFromLocal
 
-    self.playerItem = AVPlayerItem(url: audioURL!)
-    self.player?.replaceCurrentItem(with: self.playerItem)
+    if usingLocalProcessor, let localURL = audioURL {
+      // Play via AudioProcessor
+      AudioProcessor.shared.play(url: localURL)
+      self.player = nil
+      self.playerItem = nil
+      self.isMediaLoading = false
+      self.isMediaFailed = false
+    } else {
+      self.playerItem = AVPlayerItem(url: audioURL!)
+      self.player?.replaceCurrentItem(with: self.playerItem)
+    }
 
     let duration = CMTime(
       seconds: self.nowPlaying.duration, preferredTimescale: self.nowPlaying.sampleRate)
@@ -156,36 +168,54 @@ class PlayerViewModel: ObservableObject {
     self.totalTimeString = timeString(for: playbackDuration)
 
     let newTimeString = self.progress * playbackDuration
-
     self.currentTimeString = timeString(for: newTimeString)
 
-    self.playerItemObservation = self.playerItem?.publisher(for: \.status)
-      .sink { [weak self] status in
-        guard let self = self else { return }
-        switch status {
-        case .readyToPlay:
-          DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+    if !usingLocalProcessor {
+      self.playerItemObservation = self.playerItem?.publisher(for: \.status)
+        .sink { [weak self] status in
+          guard let self = self else { return }
+          switch status {
+          case .readyToPlay:
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+              self.isMediaLoading = false
+              self.isMediaFailed = false
+            }
+          case .failed:
             self.isMediaLoading = false
-            self.isMediaFailed = false
+            self.isMediaFailed = true
+          case .unknown:
+            self.isMediaLoading = false
+          @unknown default:
+            self.isMediaLoading = true
           }
-        case .failed:
-          self.isMediaLoading = false
-          self.isMediaFailed = true
-        case .unknown:
-          self.isMediaLoading = false
-        @unknown default:
-          self.isMediaLoading = true
         }
-      }
-
-    if playAudio {
-      self.seek(to: 0.0)
-      self.play()
     } else {
-      self.seek(to: self.progress)
+      self.isMediaLoading = false
     }
 
-    self.addPeriodicTimeObserver()
+    if playAudio {
+      if usingLocalProcessor {
+        AudioProcessor.shared.resume()
+        self.isPlaying = true
+      } else {
+        self.seek(to: 0.0)
+        self.play()
+      }
+    } else {
+      if usingLocalProcessor {
+        AudioProcessor.shared.pause()
+        self.isPlaying = false
+      } else {
+        self.seek(to: self.progress)
+      }
+    }
+
+    if !usingLocalProcessor {
+      self.addPeriodicTimeObserver()
+    } else {
+      // Progress won't update yet – we'll add later
+    }
+
     self.initNowPlayingInfo(
       title: self.nowPlaying.songName ?? "",
       artist: self.nowPlaying.artistName ?? "",
@@ -319,40 +349,54 @@ class PlayerViewModel: ObservableObject {
     }
   }
 
+  // MARK: - Updated play/pause/stop/seek for local processor
   func play() {
-    if self.isFinished {
-      self.stop()
-      self.updateNowPlayingInfo(progress: self.progress, rate: 0.0)
+    if usingLocalProcessor {
+      AudioProcessor.shared.resume()
+      self.isPlaying = true
+    } else {
+      if self.isFinished {
+        self.stop()
+        self.updateNowPlayingInfo(progress: self.progress, rate: 0.0)
+      }
+      player?.play()
+      self.isFinished = false
+      self.isPlaying = true
+      self.updateNowPlayingInfo(progress: self.progress, rate: 1.0)
     }
-
-    player?.play()
-
-    self.isFinished = false
-    self.isPlaying = true
-    self.updateNowPlayingInfo(progress: self.progress, rate: 1.0)
   }
 
   func pause() {
-    player?.pause()
-
-    self.isPlaying = false
-    self.updateNowPlayingInfo(progress: self.progress, rate: 0.0)
+    if usingLocalProcessor {
+      AudioProcessor.shared.pause()
+      self.isPlaying = false
+    } else {
+      player?.pause()
+      self.isPlaying = false
+      self.updateNowPlayingInfo(progress: self.progress, rate: 0.0)
+    }
   }
 
   func stop() {
-    player?.pause()
-    player?.seek(to: CMTime.zero)
-
-    self.isFinished = true
-    self.isPlaying = false
+    if usingLocalProcessor {
+      AudioProcessor.shared.stop()
+      self.isPlaying = false
+    } else {
+      player?.pause()
+      player?.seek(to: CMTime.zero)
+      self.isFinished = true
+      self.isPlaying = false
+    }
   }
 
   func seek(to progress: Double) {
+    if usingLocalProcessor {
+      // Seeking not implemented yet for local playback
+      return
+    }
     let newTime = CMTime(
       seconds: progress * totalDuration, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-
     player?.seek(to: newTime)
-
     self.updateNowPlayingInfo(progress: progress, rate: 1.0)
   }
 
