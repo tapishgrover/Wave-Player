@@ -17,6 +17,7 @@ struct PlayerView: View {
   @State private var isDragging = false
 
   @State private var showQueue = false
+  @State private var showingAudioSettings = false      // <-- new state for settings
 
   @GestureState private var queueDragOffset: CGSize = .zero
 
@@ -277,7 +278,7 @@ struct PlayerView: View {
 
           HStack {
             Button {
-
+              // placeholder
             } label: {
               Image(systemName: "quote.bubble")
                 .font(.title2)
@@ -286,13 +287,14 @@ struct PlayerView: View {
 
             Spacer()
 
+            // New settings button (replaced the disabled airplayaudio)
             Button {
-
+              showingAudioSettings = true
             } label: {
-              Image(systemName: "airplayaudio")
+              Image(systemName: "slider.horizontal.3")
                 .font(.title2)
-                .foregroundColor(.gray)
-            }.disabled(true)
+                .foregroundColor(.white)
+            }
 
             Spacer()
 
@@ -376,10 +378,282 @@ struct PlayerView: View {
             isDragging = false
           }
       )
-
+      // Sheet for audio settings
+      .sheet(isPresented: $showingAudioSettings) {
+        AudioSettingsMainView()
+      }
     }
     .foregroundColor(.white)
   }
+}
+
+// MARK: - Audio Settings Views
+
+struct AudioSettingsMainView: View {
+    var body: some View {
+        NavigationView {
+            List {
+                NavigationLink("Graphic Equalizer", destination: GraphicEqualizerView())
+                NavigationLink("Equal Loudness", destination: EqualLoudnessView())
+                NavigationLink("Virtualizer", destination: VirtualizerView())
+                NavigationLink("Bass Tuner", destination: BassTunerView())
+                NavigationLink("Limiter", destination: LimiterView())
+                NavigationLink("Channel Balance", destination: ChannelBalanceView())
+                NavigationLink("AutoEq", destination: AutoEqView())
+            }
+            .navigationTitle("Wave Player")
+        }
+    }
+}
+
+struct GraphicEqualizerView: View {
+    @State private var bands: [Float] = [0, 0, 0, 0, 0, 0]
+    let frequencies = [54, 148, 403, 1096, 2980, 8103]
+    
+    var body: some View {
+        List {
+            Section {
+                HStack {
+                    Text("Presets")
+                    Spacer()
+                    Menu("V‑shaped") {
+                        Button("V‑shaped") { setPreset("v") }
+                        Button("U‑shaped") { setPreset("u") }
+                        Button("M‑shaped") { setPreset("m") }
+                    }
+                }
+            }
+            
+            Section {
+                ForEach(0..<frequencies.count, id: \.self) { index in
+                    HStack {
+                        Text("\(frequencies[index]) Hz")
+                            .frame(width: 70, alignment: .leading)
+                            .font(.caption)
+                        Slider(value: $bands[index], in: -7.5...7.5, step: 0.5)
+                        Text(String(format: "%.1f", bands[index]))
+                            .frame(width: 40, alignment: .trailing)
+                            .font(.caption)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Graphic Equalizer")
+    }
+    
+    func setPreset(_ shape: String) {
+        switch shape {
+        case "v":
+            bands = [3.0, 0.0, -2.0, -2.0, 0.0, 3.0]
+        case "u":
+            bands = [-3.0, 0.0, 2.0, 2.0, 0.0, -3.0]
+        case "m":
+            bands = [0.0, 3.0, 0.0, 0.0, 3.0, 0.0]
+        default:
+            break
+        }
+    }
+}
+
+struct EqualLoudnessView: View {
+    @State private var threshold: Float = -20.0
+    
+    var body: some View {
+        List {
+            Section {
+                HStack {
+                    Text("Volume threshold")
+                    Spacer()
+                    Text(String(format: "%.0f dB", threshold))
+                }
+                Slider(value: $threshold, in: -30...0, step: 1)
+            }
+            
+            Section {
+                // Placeholder for the equal loudness graph
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(height: 150)
+                    .overlay(
+                        VStack {
+                            Text("Equal loudness curve")
+                                .foregroundColor(.secondary)
+                            Text("(frequencies: 54 – 8103 Hz)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    )
+            }
+        }
+        .navigationTitle("Equal Loudness")
+    }
+}
+
+struct VirtualizerView: View {
+    @State private var strength: Float = 25.0
+    
+    var body: some View {
+        List {
+            Section {
+                HStack {
+                    Text("Virtualization strength")
+                    Spacer()
+                    Text(String(format: "%.0f%%", strength))
+                }
+                Slider(value: $strength, in: 0...100, step: 1)
+            }
+        }
+        .navigationTitle("Virtualizer")
+    }
+}
+
+struct BassTunerView: View {
+    let bassTypes = ["Sustain compressor", "Transient enhancer"]
+    let cutoffFrequencies = ["60Hz", "80Hz", "100Hz", "120Hz"]
+    
+    @State private var selectedType = "Sustain compressor"
+    @State private var selectedCutoff = "60Hz"
+    @State private var postGain: Float = 0.0
+    
+    var body: some View {
+        List {
+            Section {
+                Picker("Bass type", selection: $selectedType) {
+                    ForEach(bassTypes, id: \.self) { type in
+                        Text(type)
+                    }
+                }
+                
+                Picker("Cutoff frequency", selection: $selectedCutoff) {
+                    ForEach(cutoffFrequencies, id: \.self) { freq in
+                        Text(freq)
+                    }
+                }
+                
+                HStack {
+                    Text("Post‑gain")
+                    Spacer()
+                    Text(String(format: "%.1f dB", postGain))
+                }
+                Slider(value: $postGain, in: -12...12, step: 0.5)
+            }
+        }
+        .navigationTitle("Bass Tuner")
+    }
+}
+
+struct LimiterView: View {
+    @State private var attack: Float = 1.0        // ms
+    @State private var release: Float = 60.0      // ms
+    @State private var ratio: Float = 10.0        // :1
+    @State private var threshold: Float = -2.0    // dB
+    @State private var autoPostGain = true
+    @State private var postGain: Float = 0.0      // dB
+    
+    var body: some View {
+        List {
+            Section {
+                HStack {
+                    Text("Attack time")
+                    Spacer()
+                    Text(String(format: "%.0f ms", attack))
+                }
+                Slider(value: $attack, in: 0.1...100, step: 0.1)
+                
+                HStack {
+                    Text("Release time")
+                    Spacer()
+                    Text(String(format: "%.0f ms", release))
+                }
+                Slider(value: $release, in: 10...1000, step: 1)
+                
+                HStack {
+                    Text("Ratio")
+                    Spacer()
+                    Text(String(format: "%.1f:1", ratio))
+                }
+                Slider(value: $ratio, in: 1...20, step: 0.5)
+                
+                HStack {
+                    Text("Threshold")
+                    Spacer()
+                    Text(String(format: "%.0f dB", threshold))
+                }
+                Slider(value: $threshold, in: -30...0, step: 1)
+                
+                Toggle("Automatic post‑gain", isOn: $autoPostGain)
+                
+                HStack {
+                    Text("Post‑gain")
+                    Spacer()
+                    Text(String(format: "%.1f dB", postGain))
+                }
+                Slider(value: $postGain, in: -12...12, step: 0.5)
+                    .disabled(autoPostGain)
+            }
+        }
+        .navigationTitle("Limiter")
+    }
+}
+
+struct ChannelBalanceView: View {
+    @State private var leftGain: Float = -0.1
+    @State private var rightGain: Float = -0.1
+    
+    var body: some View {
+        List {
+            Section {
+                HStack {
+                    Text("Left")
+                    Spacer()
+                    Text(String(format: "%.1f dB", leftGain))
+                }
+                Slider(value: $leftGain, in: -12...12, step: 0.1)
+                
+                HStack {
+                    Text("Right")
+                    Spacer()
+                    Text(String(format: "%.1f dB", rightGain))
+                }
+                Slider(value: $rightGain, in: -12...12, step: 0.1)
+            }
+        }
+        .navigationTitle("Channel Balance")
+    }
+}
+
+struct AutoEqView: View {
+    let headphones = ["Skullcandy Crusher Wireless", "Sony WH-1000XM4", "Apple AirPods Max"]
+    @State private var selectedHeadphone = "Skullcandy Crusher Wireless"
+    
+    var body: some View {
+        List {
+            Section {
+                Picker("Headphone model", selection: $selectedHeadphone) {
+                    ForEach(headphones, id: \.self) { model in
+                        Text(model)
+                    }
+                }
+            }
+            
+            Section {
+                // Placeholder for the EQ curve graph
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(height: 150)
+                    .overlay(
+                        VStack {
+                            Text("AutoEq curve")
+                                .foregroundColor(.secondary)
+                            Text("(to be implemented)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    )
+            }
+        }
+        .navigationTitle("AutoEq")
+    }
 }
 
 struct PlayerView_previews: PreviewProvider {
