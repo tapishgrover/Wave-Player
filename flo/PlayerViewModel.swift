@@ -158,6 +158,9 @@ class PlayerViewModel: ObservableObject {
   // MARK: - New property for local audio processing
   private var usingLocalProcessor: Bool = false
 
+  // MARK: - Timer fallback for progress updates (used when AVPlayer's periodic observer doesn't work)
+  private var progressTimer: Timer?
+
   var nowPlaying: QueueEntity {
     return self.queue[self.activeQueueIdx]
   }
@@ -251,6 +254,10 @@ class PlayerViewModel: ObservableObject {
     self.shouldHidePlayer = false
     self.isLocallySaved = false
 
+    // Stop any existing timer
+    progressTimer?.invalidate()
+    progressTimer = nil
+
     if let timeObserverToken = timeObserverToken {
       player?.removeTimeObserver(timeObserverToken)
     }
@@ -321,6 +328,8 @@ class PlayerViewModel: ObservableObject {
 
     if !usingLocalProcessor {
       self.addPeriodicTimeObserver()
+      // Start timer fallback as well (safe to run alongside the observer)
+      startProgressTimer()
     } else {
       // Progress won't update yet – we'll add later
     }
@@ -362,6 +371,25 @@ class PlayerViewModel: ObservableObject {
         UserDefaultsManager.removeObject(key: UserDefaultsKeys.nowPlayingProgress)
       }
     }
+  }
+
+  // MARK: - Timer fallback for progress updates
+  private func startProgressTimer() {
+    progressTimer?.invalidate()
+    progressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+      guard let self = self, let player = self.player, !self.usingLocalProcessor else { return }
+      let currentTime = player.currentTime().seconds
+      if currentTime.isFinite && currentTime > 0 {
+        self.progress = currentTime / self.totalDuration
+        self.currentTimeString = timeString(for: currentTime)
+        UserDefaultsManager.nowPlayingProgress = self.progress
+      }
+    }
+  }
+
+  private func stopProgressTimer() {
+    progressTimer?.invalidate()
+    progressTimer = nil
   }
 
   private func initNowPlayingInfo(
@@ -496,6 +524,7 @@ class PlayerViewModel: ObservableObject {
       self.isFinished = true
       self.isPlaying = false
     }
+    stopProgressTimer()
   }
 
   func seek(to progress: Double) {
@@ -636,5 +665,6 @@ class PlayerViewModel: ObservableObject {
       player?.removeTimeObserver(timeObserverToken)
       player?.pause()
     }
+    progressTimer?.invalidate()
   }
 }
