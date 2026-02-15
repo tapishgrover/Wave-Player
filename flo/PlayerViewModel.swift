@@ -259,23 +259,14 @@ class PlayerViewModel: ObservableObject {
     self._playFromLocal = audioURL?.isFileURL == true
     self.usingLocalProcessor = self._playFromLocal
 
+    // 🔧 TEMPORARY: Force AVPlayer for local files to test playback
     if usingLocalProcessor, let localURL = audioURL {
-        // Try to play via AudioProcessor
-        let success = AudioProcessor.shared.play(url: localURL)
-        if success {
-            self.player = nil
-            self.playerItem = nil
-            self.isMediaLoading = false
-            self.isMediaFailed = false
-        } else {
-            // Fall back to original player
-            self.usingLocalProcessor = false
-            self.playerItem = AVPlayerItem(url: audioURL!)
-            self.player?.replaceCurrentItem(with: self.playerItem)
-        }
+        self.usingLocalProcessor = false
+        self.playerItem = AVPlayerItem(url: localURL)
+        self.player?.replaceCurrentItem(with: self.playerItem)
     } else {
-      self.playerItem = AVPlayerItem(url: audioURL!)
-      self.player?.replaceCurrentItem(with: self.playerItem)
+        self.playerItem = AVPlayerItem(url: audioURL!)
+        self.player?.replaceCurrentItem(with: self.playerItem)
     }
 
     let duration = CMTime(
