@@ -23,7 +23,7 @@ class AudioProcessor: ObservableObject {
         didSet { applyEQ() }
     }
     
-    // For fallback – we'll let the main player know if we failed
+    // Indicates whether the last play attempt failed
     @Published var didFail = false
     
     private init() {
