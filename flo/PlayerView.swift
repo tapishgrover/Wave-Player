@@ -17,7 +17,7 @@ struct PlayerView: View {
   @State private var isDragging = false
 
   @State private var showQueue = false
-  @State private var showingAudioSettings = false      // <-- new state for settings
+  @State private var showingAudioSettings = false
 
   @GestureState private var queueDragOffset: CGSize = .zero
 
@@ -298,6 +298,18 @@ struct PlayerView: View {
 
             Spacer()
 
+            // Visual indicator for local EQ
+            if viewModel._playFromLocal {
+                Text("EQ")
+                    .font(.caption2)
+                    .padding(4)
+                    .background(Color.accentColor)
+                    .foregroundColor(.white)
+                    .cornerRadius(4)
+            }
+
+            Spacer()
+
             Button {
               self.showQueue.toggle()
             } label: {
@@ -407,7 +419,7 @@ struct AudioSettingsMainView: View {
 }
 
 struct GraphicEqualizerView: View {
-    @State private var bands: [Float] = [0, 0, 0, 0, 0, 0]
+    @ObservedObject var audioProcessor = AudioProcessor.shared
     let frequencies = [54, 148, 403, 1096, 2980, 8103]
     
     var body: some View {
@@ -430,8 +442,8 @@ struct GraphicEqualizerView: View {
                         Text("\(frequencies[index]) Hz")
                             .frame(width: 70, alignment: .leading)
                             .font(.caption)
-                        Slider(value: $bands[index], in: -7.5...7.5, step: 0.5)
-                        Text(String(format: "%.1f", bands[index]))
+                        Slider(value: $audioProcessor.eqBands[index], in: -7.5...7.5, step: 0.5)
+                        Text(String(format: "%.1f", audioProcessor.eqBands[index]))
                             .frame(width: 40, alignment: .trailing)
                             .font(.caption)
                     }
@@ -439,16 +451,19 @@ struct GraphicEqualizerView: View {
             }
         }
         .navigationTitle("Graphic Equalizer")
+        .onDisappear {
+            audioProcessor.saveSettings()
+        }
     }
     
     func setPreset(_ shape: String) {
         switch shape {
         case "v":
-            bands = [3.0, 0.0, -2.0, -2.0, 0.0, 3.0]
+            audioProcessor.eqBands = [3.0, 0.0, -2.0, -2.0, 0.0, 3.0]
         case "u":
-            bands = [-3.0, 0.0, 2.0, 2.0, 0.0, -3.0]
+            audioProcessor.eqBands = [-3.0, 0.0, 2.0, 2.0, 0.0, -3.0]
         case "m":
-            bands = [0.0, 3.0, 0.0, 0.0, 3.0, 0.0]
+            audioProcessor.eqBands = [0.0, 3.0, 0.0, 0.0, 3.0, 0.0]
         default:
             break
         }
@@ -543,12 +558,7 @@ struct BassTunerView: View {
 }
 
 struct LimiterView: View {
-    @State private var attack: Float = 1.0        // ms
-    @State private var release: Float = 60.0      // ms
-    @State private var ratio: Float = 10.0        // :1
-    @State private var threshold: Float = -2.0    // dB
-    @State private var autoPostGain = true
-    @State private var postGain: Float = 0.0      // dB
+    @ObservedObject var audioProcessor = AudioProcessor.shared
     
     var body: some View {
         List {
@@ -556,43 +566,29 @@ struct LimiterView: View {
                 HStack {
                     Text("Attack time")
                     Spacer()
-                    Text(String(format: "%.0f ms", attack))
+                    Text(String(format: "%.0f ms", audioProcessor.limiterAttack))
                 }
-                Slider(value: $attack, in: 0.1...100, step: 0.1)
+                Slider(value: $audioProcessor.limiterAttack, in: 0.1...100, step: 0.1)
                 
                 HStack {
                     Text("Release time")
                     Spacer()
-                    Text(String(format: "%.0f ms", release))
+                    Text(String(format: "%.0f ms", audioProcessor.limiterRelease))
                 }
-                Slider(value: $release, in: 10...1000, step: 1)
+                Slider(value: $audioProcessor.limiterRelease, in: 10...1000, step: 1)
                 
                 HStack {
-                    Text("Ratio")
+                    Text("Pre‑gain")
                     Spacer()
-                    Text(String(format: "%.1f:1", ratio))
+                    Text(String(format: "%.1f dB", audioProcessor.limiterPreGain))
                 }
-                Slider(value: $ratio, in: 1...20, step: 0.5)
-                
-                HStack {
-                    Text("Threshold")
-                    Spacer()
-                    Text(String(format: "%.0f dB", threshold))
-                }
-                Slider(value: $threshold, in: -30...0, step: 1)
-                
-                Toggle("Automatic post‑gain", isOn: $autoPostGain)
-                
-                HStack {
-                    Text("Post‑gain")
-                    Spacer()
-                    Text(String(format: "%.1f dB", postGain))
-                }
-                Slider(value: $postGain, in: -12...12, step: 0.5)
-                    .disabled(autoPostGain)
+                Slider(value: $audioProcessor.limiterPreGain, in: -12...12, step: 0.5)
             }
         }
         .navigationTitle("Limiter")
+        .onDisappear {
+            audioProcessor.saveSettings()
+        }
     }
 }
 
