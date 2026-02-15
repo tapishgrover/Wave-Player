@@ -10,6 +10,13 @@ import Combine
 import MediaPlayer
 import SwiftUI
 
+// MARK: - PlaybackMode Enum
+enum PlaybackMode {
+    case defaultPlayback
+    case repeatAlbum
+    case repeatOnce
+}
+
 // MARK: - AudioProcessor (improved)
 class AudioProcessor: ObservableObject {
     static let shared = AudioProcessor()
@@ -436,10 +443,12 @@ class PlayerViewModel: ObservableObject {
   }
 
   func setPlaybackMode() {
-    switch playbackMode {
-    case .defaultPlayback: playbackMode = .repeatAlbum
-    case .repeatAlbum: playbackMode = .repeatOnce
-    default: playbackMode = .defaultPlayback
+    if playbackMode == .defaultPlayback {
+      playbackMode = .repeatAlbum
+    } else if playbackMode == .repeatAlbum {
+      playbackMode = .repeatOnce
+    } else {
+      playbackMode = .defaultPlayback
     }
     UserDefaultsManager.playbackMode = playbackMode
   }
