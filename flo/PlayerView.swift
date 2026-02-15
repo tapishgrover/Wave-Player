@@ -298,14 +298,20 @@ struct PlayerView: View {
 
             Spacer()
 
-            // Visual indicator for local EQ
+            // Visual indicator for local EQ with diagnostic icon
             if viewModel._playFromLocal {
-                Text("EQ")
-                    .font(.caption2)
-                    .padding(4)
-                    .background(Color.accentColor)
-                    .foregroundColor(.white)
-                    .cornerRadius(4)
+                HStack(spacing: 4) {
+                    Text("EQ")
+                    if AudioProcessor.shared.didFail {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundColor(.yellow)
+                    }
+                }
+                .font(.caption2)
+                .padding(4)
+                .background(Color.accentColor)
+                .foregroundColor(.white)
+                .cornerRadius(4)
             }
 
             Spacer()
